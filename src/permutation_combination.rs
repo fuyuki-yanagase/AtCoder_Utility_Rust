@@ -1,0 +1,440 @@
+// 順列・組合せ
+#![allow(non_snake_case)]
+#![allow(unused)]
+#![allow(clippy::bool_comparison)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::doc_lazy_continuation)]
+#![allow(clippy::items_after_test_module)]
+#![allow(clippy::needless_late_init)]
+#![allow(clippy::needless_lifetimes)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::needless_return)]
+#![allow(clippy::new_without_default)]
+#![allow(clippy::only_used_in_recursion)]
+#![allow(clippy::ptr_arg)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::unnecessary_sort_by)]
+#![allow(clippy::wrong_self_convention)]
+#![allow(clippy::zero_repeat_side_effects)]
+
+use num_complex::*;
+use num_rational::*;
+use std::cmp;
+use std::cmp::*;
+use std::collections::*;
+use std::f64::consts::*;
+use std::fmt;
+use std::fmt::{Debug, Display};
+use std::io::{self, BufWriter, Read, Write};
+use std::iter::*;
+use std::marker::*;
+use std::mem::*;
+use std::ops::*;
+use std::str::FromStr;
+
+// 1行でのbreak, continue, return
+macro_rules! breakif {
+    ($c:expr) => {
+        if $c {
+            break;
+        }
+    };
+    ($c:expr, $l:lifetime) => {
+        if $c {
+            break $l;
+        }
+    };
+}
+macro_rules! continueif {
+    ($c:expr) => {
+        if $c {
+            continue;
+        }
+    };
+    ($c:expr, $l:lifetime) => {
+        if $c {
+            continue $l;
+        }
+    };
+}
+macro_rules! returnif {
+    ($c:expr) => {
+        if $c {
+            return;
+        }
+    };
+    ($c:expr, $v:expr) => {
+        if $c {
+            return $v;
+        }
+    };
+}
+
+const M107: i64 = 1000000007_i64;
+const M998: i64 = 998244353_i64;
+const L108: i64 = 100_000_000_i64;
+const I108: i32 = 100_000_000_i32;
+const L1018: i64 = 1_000_000_000_000_000_000_i64;
+const IINF: i32 = (1_i32 << 29) - 1;
+const LINF: i64 = (1_i64 << 61) - 1;
+const UINF: usize = (1_usize << 61) - 1;
+
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+//
+//                                     順列・組合せ
+//
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/permutation_combination.rs
+
+/// 0からmax_nまでの逆元を列挙
+/// inv[x] = x の mod modulus における逆元
+///  - modulus は素数
+///  - max_n < modulus で想定
+///  - inv[0] は数学的に存在しないので0
+/// 計算量 : O(max_n)
+#[inline(always)]
+pub fn enum_inv(max_n: usize, modulus: i64) -> Vec<i64> {
+    debug_assert!(modulus >= 2);
+    debug_assert!((max_n as i128) < (modulus as i128));
+
+    let mut inv = vec![0_i64; max_n + 1];
+    if max_n >= 1 {
+        inv[1] = 1;
+    }
+
+    for i in 2..=max_n {
+        let index = (modulus % (i as i64)) as usize;
+
+        // inv[v] = -(modulus / i) * inv[modulus % i] mod modulus
+        inv[i] = modulus - mod_mul(inv[index], modulus / (i as i64), modulus);
+
+        // modulus になる場合があるので正規化
+        inv[i] = mod_normalize(inv[i], modulus);
+    }
+
+    return inv;
+} // end of method
+
+/// 0からmax_nまでの階乗を列挙
+/// fact[x] = x! mod modulus
+/// 計算量 O(max_n)
+#[inline(always)]
+pub fn enum_fact(max_n: usize, modulus: i64) -> Vec<i64> {
+    debug_assert!(modulus >= 2);
+
+    let mut fact = vec![0_i64; max_n + 1];
+    fact[0] = 1;
+    for i in 1..=max_n {
+        fact[i] = mod_mul(fact[i - 1], i as i64, modulus);
+    }
+    return fact;
+} // end of method
+
+/// 0からmax_nまでの階乗の逆元を列挙
+/// inv_fact[x] = 1 / x! mod modulus
+/// 計算量 O(max_n + log modulus)
+#[inline(always)]
+pub fn enum_inv_fact(max_n: usize, modulus: i64) -> Vec<i64> {
+    debug_assert!(modulus >= 2);
+    debug_assert!((max_n as i128) < (modulus as i128));
+
+    let fact = enum_fact(max_n, modulus);
+    let mut inv_fact = vec![0_i64; max_n + 1];
+
+    // max_n! の逆元を繰り返し二乗法で
+    inv_fact[max_n] = mod_pow(fact[max_n], modulus - 2, modulus);
+
+    // inv_fact[i - 1] = inv_fact[i] * i;
+    for i in (1..=max_n).rev() {
+        inv_fact[i - 1] = mod_mul(inv_fact[i], i as i64, modulus);
+    }
+    return inv_fact;
+} // end of method
+
+/// fact配列から階乗の逆元配列を作る
+/// inv_fact[x] = 1 / x! mod modulus
+/// 計算量 : O(max_n + log(modulus))
+#[inline(always)]
+pub fn enum_inv_fact_from_fact(fact: &[i64], modulus: i64) -> Vec<i64> {
+    debug_assert!(modulus >= 2);
+    debug_assert!(!fact.is_empty());
+
+    let max_n = fact.len() - 1;
+    let mut inv_fact = vec![0_i64; max_n + 1];
+
+    // max_n!の逆元を最初に求める
+    inv_fact[max_n] = mod_pow(fact[max_n], modulus - 2, modulus);
+
+    // inv_fact[i-1] = inv_fact[i] * i
+    // 1/5! がわかっていれば, 1/4! = 5/5! にできる
+    for i in (1..=max_n).rev() {
+        inv_fact[i - 1] = mod_mul(inv_fact[i], i as i64, modulus);
+    }
+    return inv_fact;
+} // end of method
+
+/// 順列と組み合わせを高速に計算するための前計算構造体
+/// nCkとnPk を何度も使うなら
+/// 前計算 O(max_n)
+/// クエリ O(1)
+pub struct ModCombination {
+    /// mod
+    pub modulus: i64,
+
+    /// fact[n] = n!
+    pub fact: Vec<i64>,
+
+    /// inv[n] = nの逆元
+    pub inv: Vec<i64>,
+
+    /// inv_fact[n] = 1/n!
+    pub inv_fact: Vec<i64>,
+} // end of struct
+
+impl ModCombination {
+    /// 0からmax_nまで前計算
+    /// - modulus は素数で使う想定
+    /// - max_n < modulus で使う想定
+    #[inline(always)]
+    pub fn new(max_n: usize, modulus: i64) -> Self {
+        debug_assert!(modulus >= 2);
+        debug_assert!((max_n as i128) < (modulus as i128));
+
+        // 階乗
+        let fact = enum_fact(max_n, modulus);
+
+        // 各整数の逆元
+        let inv = enum_inv(max_n, modulus);
+
+        // 階乗の逆元
+        let inv_fact = enum_inv_fact_from_fact(&fact, modulus);
+
+        return Self {
+            modulus,
+            fact,
+            inv,
+            inv_fact,
+        };
+    } // end of constructor
+
+    /// nCkを計算する
+    /// nCk = n! / (k! * (n - k)!)
+    /// 計算量 : O(1)
+    #[inline(always)]
+    pub fn nCk(&self, n: usize, k: usize) -> i64 {
+        if k > n {
+            return 0;
+        }
+        debug_assert!(n < self.fact.len());
+
+        let mut result = self.fact[n];
+        result = mod_mul(result, self.inv_fact[k], self.modulus);
+        result = mod_mul(result, self.inv_fact[n - k], self.modulus);
+        return result;
+    } // end of method
+
+    /// nPkを計算する
+    /// nPk = n! / (n - k)!
+    /// 計算量 : O(1)
+    #[inline(always)]
+    pub fn nPk(&self, n: usize, k: usize) -> i64 {
+        if k > n {
+            return 0;
+        }
+        debug_assert!(n < self.fact.len());
+
+        let result = mod_mul(self.fact[n], self.inv_fact[n - k], self.modulus);
+        return result;
+    } // end of method
+
+    /// n!を返す
+    #[inline(always)]
+    pub fn factorial(&self, n: usize) -> i64 {
+        debug_assert!(n < self.fact.len());
+        return self.fact[n];
+    } // end of method
+
+    /// nの逆元を返す
+    /// 0の逆元は存在しないのでNone
+    #[inline(always)]
+    pub fn inverse(&self, n: usize) -> Option<i64> {
+        if n == 0 {
+            return None;
+        }
+        debug_assert!(n < self.inv.len());
+
+        return Some(self.inv[n]);
+    } // end of method
+
+    /// n!の逆元を返す
+    #[inline(always)]
+    pub fn inverse_factorial(&self, n: usize) -> i64 {
+        debug_assert!(n < self.inv_fact.len());
+        return self.inv_fact[n];
+    } // end of method
+} // end of impl ModCombination
+
+/// nCkを直接計算
+/// n < modulus で使う想定
+/// 計算量 : O(k + log(modulus))
+#[inline(always)]
+pub fn nCk_direct(n: i64, k: i64, modulus: i64) -> Option<i64> {
+    debug_assert!(modulus >= 2);
+    if k < 0 || n < 0 || k > n {
+        return Some(0);
+    }
+
+    // nCk = nC(n-k)なので小さい方
+    let mut k_small = k;
+    if n - k < k_small {
+        k_small = n - k;
+    }
+
+    // 分子は n*(n-1)*...*(n-k+1)
+    let mut numerator = 1_i64;
+
+    // 分母は 1*2*...*k
+    let mut denominator = 1_i64;
+
+    for i in 0..k_small {
+        numerator = mod_mul(numerator, n - i, modulus);
+        denominator = mod_mul(denominator, i + 1, modulus);
+    }
+    return mod_div_prime(numerator, denominator, modulus);
+} // end of method
+
+/// nPkを直接計算
+/// nPk = n*(n-1)*...*(n-k+1)
+/// 計算量 : O(k)
+#[inline(always)]
+pub fn nPk_direct(n: i64, k: i64, modulus: i64) -> i64 {
+    debug_assert!(modulus >= 2);
+    if k < 0 || n < 0 || k > n {
+        return 0;
+    }
+
+    let mut result = 1_i64;
+    for i in 0..k {
+        result = mod_mul(result, n - i, modulus);
+    }
+    return result;
+} // end of method
+
+/// 負の値にも対応して, 0以上modulus未満に正規化
+#[inline(always)]
+pub fn mod_normalize(value: i64, modulus: i64) -> i64 {
+    debug_assert!(modulus > 0);
+    return value.rem_euclid(modulus);
+} // end of method
+
+/// 掛け算してからmod
+/// i64*i64がオーバーフローしないように内部はi128計算
+#[inline(always)]
+pub fn mod_mul(left: i64, right: i64, modulus: i64) -> i64 {
+    debug_assert!(modulus > 0);
+
+    let value = (left as i128) * (right as i128);
+    let modulo = modulus as i128;
+
+    return value.rem_euclid(modulo) as i64;
+} // end of method
+
+/// base^exponent mod modulus を繰り返し二乗法で計算
+/// O(log exponent)
+#[inline(always)]
+pub fn mod_pow(mut base: i64, mut exponent: i64, modulus: i64) -> i64 {
+    debug_assert!(modulus > 0);
+    debug_assert!(exponent >= 0);
+    if modulus == 1 {
+        return 0;
+    }
+
+    // 掛け算の単位元
+    let mut result = 1_i64.rem_euclid(modulus);
+    // baseが負でも扱えるように正規化
+    base = mod_normalize(base, modulus);
+
+    while exponent > 0 {
+        // exponentの最下位bitが立っているなら, 今のbaseをかける
+        if (exponent & 1) == 1 {
+            result = mod_mul(result, base, modulus);
+        }
+
+        // 次のbitに
+        exponent >>= 1;
+
+        // baseを二乗して, 次の2^k乗に
+        base = mod_mul(base, base, modulus);
+    }
+    return result;
+} // end of method
+
+/// 拡張ユークリッド互除法
+/// ax + by = gcd(a, b) となる gcd, x, y を返す
+#[inline(always)]
+fn extended_gcd_i128(a: i128, b: i128) -> (i128, i128, i128) {
+    if b == 0 {
+        return (a, 1, 0);
+    }
+
+    let (gcd, x1, y1) = extended_gcd_i128(b, a % b);
+    let x = y1;
+    let y = x1 - (a / b) * y1;
+
+    return (gcd, x, y);
+}
+
+/// aの mod modulusにおける逆元を返す
+/// 逆元が存在しないなら None
+/// 逆元が存在する条件は gcd(a, modulus) == 1
+#[inline(always)]
+pub fn mod_inv(value: i64, modulus: i64) -> Option<i64> {
+    debug_assert!(modulus > 0);
+
+    // mod 1では全て0
+    if modulus == 1 {
+        return None;
+    }
+
+    let a = mod_normalize(value, modulus) as i128;
+    let m = modulus as i128;
+
+    let (gcd, x, _) = extended_gcd_i128(a, m);
+    if gcd != 1 {
+        return None;
+    }
+    return Some(x.rem_euclid(m) as i64);
+} // end of method
+
+/// nume / deno mod modulus を計算
+/// deno の逆元が存在しない場合はNoneを返す
+#[inline(always)]
+pub fn mod_div(nume: i64, deno: i64, modulus: i64) -> Option<i64> {
+    let inv = mod_inv(deno, modulus)?; // ?演算子 → Noneならreturn None, Someならunwrap
+    return Some(mod_mul(nume, inv, modulus));
+} // end of method
+
+/// modulus が素数であることがわかっている場合の割り算
+/// フェルマーの小定理より
+///  deno^(-1) = deno^(modulus - 2) mod modulus
+///
+/// 条件
+///  - modulus は素数
+///  - deno は modulus で割り切れない
+#[inline(always)]
+pub fn mod_div_prime(nume: i64, deno: i64, modulus: i64) -> Option<i64> {
+    debug_assert!(modulus >= 2);
+    if mod_normalize(deno, modulus) == 0 {
+        return None;
+    }
+
+    let inv = mod_pow(deno, modulus - 2, modulus);
+    return Some(mod_mul(nume, inv, modulus));
+} // end of method

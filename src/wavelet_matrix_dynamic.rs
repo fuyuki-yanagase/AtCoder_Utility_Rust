@@ -1,0 +1,770 @@
+// 動的ウェーブレット行列
+#![allow(non_snake_case)]
+#![allow(unused)]
+#![allow(clippy::bool_comparison)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::doc_lazy_continuation)]
+#![allow(clippy::items_after_test_module)]
+#![allow(clippy::needless_late_init)]
+#![allow(clippy::needless_lifetimes)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::needless_return)]
+#![allow(clippy::new_without_default)]
+#![allow(clippy::only_used_in_recursion)]
+#![allow(clippy::ptr_arg)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::unnecessary_sort_by)]
+#![allow(clippy::wrong_self_convention)]
+#![allow(clippy::zero_repeat_side_effects)]
+
+use num_complex::*;
+use num_rational::*;
+use std::cmp;
+use std::cmp::*;
+use std::collections::*;
+use std::f64::consts::*;
+use std::fmt;
+use std::fmt::{Debug, Display};
+use std::io::{self, BufWriter, Read, Write};
+use std::iter::*;
+use std::marker::*;
+use std::mem::*;
+use std::ops::*;
+use std::str::FromStr;
+
+// 1行でのbreak, continue, return
+macro_rules! breakif {
+    ($c:expr) => {
+        if $c {
+            break;
+        }
+    };
+    ($c:expr, $l:lifetime) => {
+        if $c {
+            break $l;
+        }
+    };
+}
+macro_rules! continueif {
+    ($c:expr) => {
+        if $c {
+            continue;
+        }
+    };
+    ($c:expr, $l:lifetime) => {
+        if $c {
+            continue $l;
+        }
+    };
+}
+macro_rules! returnif {
+    ($c:expr) => {
+        if $c {
+            return;
+        }
+    };
+    ($c:expr, $v:expr) => {
+        if $c {
+            return $v;
+        }
+    };
+}
+
+const M107: i64 = 1000000007_i64;
+const M998: i64 = 998244353_i64;
+const L108: i64 = 100_000_000_i64;
+const I108: i32 = 100_000_000_i32;
+const L1018: i64 = 1_000_000_000_000_000_000_i64;
+const IINF: i32 = (1_i32 << 29) - 1;
+const LINF: i64 = (1_i64 << 61) - 1;
+const UINF: usize = (1_usize << 61) - 1;
+
+use crate::coordinate_compression::CoordinateCompression;
+
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+//
+//                                    動的ウェーブレット行列
+//
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/wavelet_matrix_dynamic.rs
+
+/// 動的ビット列の AVL 木。ビットは葉だけに詰め、枝は部分木の集計を持つ。
+struct DynamicBitNode {
+    left: Option<Box<Self>>,
+    right: Option<Box<Self>>,
+    word: u64,
+    len: usize,
+    ones: usize,
+    leaves: usize,
+    height: u32,
+}
+
+impl DynamicBitNode {
+    #[inline]
+    fn leaf(word: u64, len: usize) -> Self {
+        return Self {
+            left: None,
+            right: None,
+            word,
+            len,
+            ones: word.count_ones() as usize,
+            leaves: 1,
+            height: 1,
+        };
+    }
+
+    #[inline]
+    fn branch(left: Box<Self>, right: Box<Self>) -> Self {
+        let mut node = Self::leaf(0, 0);
+        node.left = Some(left);
+        node.right = Some(right);
+        node.pull();
+        return node;
+    }
+
+    #[inline]
+    fn pull(&mut self) {
+        let left = self.left.as_ref().unwrap();
+        let right = self.right.as_ref().unwrap();
+        self.len = left.len + right.len;
+        self.ones = left.ones + right.ones;
+        self.leaves = left.leaves + right.leaves;
+        self.height = 1 + left.height.max(right.height);
+    }
+
+    #[inline]
+    fn balance(&self) -> i32 {
+        return self.left.as_ref().map_or(0, |node| node.height as i32)
+            - self.right.as_ref().map_or(0, |node| node.height as i32);
+    }
+
+    #[inline]
+    fn rotate_left(&mut self) {
+        let mut right = self.right.take().unwrap();
+        // 既存の Box を再利用し、回転による割り当てを避ける。
+        swap(self, &mut right);
+        right.right = self.left.take();
+        right.pull();
+        self.left = Some(right);
+        self.pull();
+    }
+
+    #[inline]
+    fn rotate_right(&mut self) {
+        let mut left = self.left.take().unwrap();
+        swap(self, &mut left);
+        left.left = self.right.take();
+        left.pull();
+        self.right = Some(left);
+        self.pull();
+    }
+
+    #[inline]
+    fn rebalance(&mut self) {
+        self.pull();
+        if self.balance() > 1 {
+            if self.left.as_ref().unwrap().balance() < 0 {
+                self.left.as_mut().unwrap().rotate_left();
+            }
+            self.rotate_right();
+        } else if self.balance() < -1 {
+            if self.right.as_ref().unwrap().balance() > 0 {
+                self.right.as_mut().unwrap().rotate_right();
+            }
+            self.rotate_left();
+        }
+    }
+
+    #[inline]
+    fn mask(len: usize) -> u64 {
+        return if len == 64 { u64::MAX } else { (1_u64 << len) - 1 };
+    }
+
+    #[inline]
+    fn word_rank(&self, end: usize) -> usize {
+        return (self.word & Self::mask(end)).count_ones() as usize;
+    }
+
+    /// ビットと、その位置より前の1の個数を同じ探索で返す。
+    #[inline]
+    fn access(&self, mut index: usize) -> (bool, usize) {
+        let mut node = self;
+        let mut ones = 0;
+        while let (Some(left), Some(right)) = (&node.left, &node.right) {
+            if index < left.len {
+                node = left;
+            } else {
+                index -= left.len;
+                ones += left.ones;
+                node = right;
+            }
+        }
+        return ((node.word >> index) & 1 != 0, ones + node.word_rank(index));
+    }
+
+    #[inline]
+    fn insert(&mut self, index: usize, bit: bool) -> usize {
+        if let (Some(left), Some(right)) = (&mut self.left, &mut self.right) {
+            let before = if index < left.len {
+                left.insert(index, bit)
+            } else {
+                left.ones + right.insert(index - left.len, bit)
+            };
+            self.rebalance();
+            return before;
+        }
+        if self.len == 64 {
+            // 満杯の葉を2つの半分に分割し、挿入先の葉へ進む。
+            *self = Self::branch(
+                Box::new(Self::leaf(self.word & Self::mask(32), 32)),
+                Box::new(Self::leaf(self.word >> 32, 32)),
+            );
+            return self.insert(index, bit);
+        }
+        let before = self.word_rank(index);
+        let low = self.word & Self::mask(index);
+        self.word = low | ((self.word ^ low) << 1) | ((bit as u64) << index);
+        self.ones += usize::from(bit);
+        self.len += 1;
+        return before;
+    }
+
+    /// 削除前のビットと、その位置より前の1の個数を返す。
+    #[inline]
+    fn remove(&mut self, index: usize) -> (bool, usize) {
+        if let (Some(left), Some(right)) = (&mut self.left, &mut self.right) {
+            let (bit, before) = if index < left.len {
+                left.remove(index)
+            } else {
+                let (bit, before) = right.remove(index - left.len);
+                (bit, left.ones + before)
+            };
+            if left.len == 0 {
+                *self = *self.right.take().unwrap();
+            } else if right.len == 0 {
+                *self = *self.left.take().unwrap();
+            } else {
+                self.rebalance();
+            }
+            return (bit, before);
+        }
+        let before = self.word_rank(index);
+        let bit = (self.word >> index) & 1 != 0;
+        let low = self.word & Self::mask(index);
+        // 末尾の index=63 でも64ビットのシフトにならないようにする。
+        let high = (self.word >> index) >> 1;
+        self.word = low | (high << index);
+        self.ones -= usize::from(bit);
+        self.len -= 1;
+        return (bit, before);
+    }
+
+    #[inline]
+    fn replace(&mut self, index: usize, bit: bool) -> (bool, usize) {
+        let (old, before) = if let (Some(left), Some(right)) = (&mut self.left, &mut self.right) {
+            if index < left.len {
+                left.replace(index, bit)
+            } else {
+                let (old, before) = right.replace(index - left.len, bit);
+                (old, before + left.ones)
+            }
+        } else {
+            let before = self.word_rank(index);
+            let old = (self.word >> index) & 1 != 0;
+            if bit != old {
+                self.word ^= 1_u64 << index;
+            }
+            (old, before)
+        };
+        if old != bit {
+            self.ones = self.ones + usize::from(bit) - usize::from(old);
+        }
+        return (old, before);
+    }
+
+    #[inline]
+    fn select(&self, bit: bool, mut k: usize) -> usize {
+        let mut node = self;
+        let mut offset = 0;
+        while let (Some(left), Some(right)) = (&node.left, &node.right) {
+            let count = if bit { left.ones } else { left.len - left.ones };
+            if k < count {
+                node = left;
+            } else {
+                k -= count;
+                offset += left.len;
+                node = right;
+            }
+        }
+        let mut word = if bit { node.word } else { !node.word & Self::mask(node.len) };
+        for _ in 0..k {
+            word &= word - 1;
+        }
+        return offset + word.trailing_zeros() as usize;
+    }
+
+    #[inline]
+    fn collect(&self, out: &mut Vec<bool>) {
+        if let (Some(left), Some(right)) = (&self.left, &self.right) {
+            left.collect(out);
+            right.collect(out);
+        } else {
+            out.extend((0..self.len).map(|i| (self.word >> i) & 1 != 0));
+        }
+    }
+}
+
+struct DynamicBits {
+    root: Box<DynamicBitNode>,
+}
+
+impl DynamicBits {
+    #[inline]
+    fn from_bits(mut bits: impl ExactSizeIterator<Item = bool>) -> Self {
+        fn build(blocks: &mut impl Iterator<Item = Box<DynamicBitNode>>, count: usize) -> Box<DynamicBitNode> {
+            if count == 1 {
+                return blocks.next().unwrap();
+            }
+            let left = build(blocks, count / 2);
+            let right = build(blocks, count - count / 2);
+            Box::new(DynamicBitNode::branch(left, right))
+        }
+        let count = bits.len().div_ceil(64).max(1);
+        let mut blocks = (0..count).map(|_| {
+            let len = bits.len().min(64);
+            let mut word = 0;
+            for (i, bit) in bits.by_ref().take(len).enumerate() {
+                word |= (bit as u64) << i;
+            }
+            Box::new(DynamicBitNode::leaf(word, len))
+        });
+        return Self {
+            root: build(&mut blocks, count),
+        };
+    }
+
+    #[inline]
+    fn zeros(&self) -> usize {
+        return self.root.len - self.root.ones;
+    }
+
+    #[inline]
+    fn rank1(&self, end: usize) -> usize {
+        returnif!(end == 0, 0);
+        returnif!(end == self.root.len, self.root.ones);
+        return self.root.access(end).1;
+    }
+
+    #[inline]
+    fn split(&self, l: usize, r: usize) -> [(usize, usize); 2] {
+        let left_ones = self.rank1(l);
+        let right_ones = self.rank1(r);
+        return [(l - left_ones, r - right_ones), (self.zeros() + left_ones, self.zeros() + right_ones)];
+    }
+
+    #[inline]
+    fn compact_if_sparse(&mut self) {
+        // 1回の編集で増える葉は最大1個。満杯に詰め直した直後から
+        // この条件を満たすまでは長さに比例した回数の編集が必要になる。
+        if self.root.leaves > self.root.len / 24 + 8 {
+            let mut bits = Vec::with_capacity(self.root.len);
+            self.root.collect(&mut bits);
+            *self = Self::from_bits(bits.into_iter());
+        }
+    }
+}
+
+enum DynamicWaveletDomain {
+    Range { min: i64, max: i64 },
+    Compressed(CoordinateCompression<i64>),
+}
+
+impl DynamicWaveletDomain {
+    #[inline]
+    fn key(&self, value: i64) -> Option<u64> {
+        return match self {
+            Self::Range {
+                min,
+                max,
+            } if *min <= value && value <= *max => Some((i128::from(value) - i128::from(*min)) as u64),
+            Self::Range {
+                ..
+            } => None,
+            Self::Compressed(values) => values.index(&value).map(|i| i as u64),
+        };
+    }
+
+    #[inline]
+    fn decode(&self, key: u64) -> i64 {
+        return match self {
+            Self::Range {
+                min,
+                ..
+            } => (i128::from(*min) + i128::from(key)) as i64,
+            Self::Compressed(values) => values[key as usize],
+        };
+    }
+
+    #[inline]
+    fn size(&self) -> u128 {
+        return match self {
+            Self::Range {
+                min,
+                max,
+            } => (i128::from(*max) - i128::from(*min) + 1) as u128,
+            Self::Compressed(values) => values.len() as u128,
+        };
+    }
+
+    /// 上限を超えるキーも表せるように u128 で返す。i64 全域の幅は2^64。
+    #[inline]
+    fn bound(&self, value: i64, inclusive: bool) -> u128 {
+        return match self {
+            Self::Range {
+                min,
+                ..
+            } => {
+                let end = i128::from(value) - i128::from(*min) + i128::from(inclusive);
+                (end.max(0) as u128).min(self.size())
+            }
+            Self::Compressed(values) => {
+                if inclusive {
+                    values.upper_bound(&value) as u128
+                } else {
+                    values.lower_bound(&value) as u128
+                }
+            }
+        };
+    }
+}
+
+/// 点代入・挿入・削除に対応する i64 配列のウェーブレット行列。
+///
+/// 区間は半開、添字・順位は0始まり。重複は出現回数分数える。
+/// 値キーのビット数を B とすると構築は O(NB)（座標圧縮のソートは別途）。
+/// 更新は償却 O(B log(N+2))、クエリは O(B log(N+2))。計算量の B は最低1とする。
+pub struct DynamicWaveletMatrix {
+    domain: DynamicWaveletDomain,
+    levels: Vec<DynamicBits>,
+    len: usize,
+}
+
+impl DynamicWaveletMatrix {
+    /// 更新値を先読みせず、i64 全域を扱う。64段。
+    #[inline]
+    pub fn new(values: &[i64]) -> Self {
+        return Self::with_value_range(values, i64::MIN, i64::MAX);
+    }
+
+    /// 値域を閉区間 [min, max] に制限し、その幅に合わせて段数を決める。
+    #[inline]
+    pub fn with_value_range(values: &[i64], min: i64, max: i64) -> Self {
+        assert!(min <= max, "値域の下限が上限を超えています");
+        return Self::build(
+            values,
+            DynamicWaveletDomain::Range {
+                min,
+                max,
+            },
+        );
+    }
+
+    /// 初期値と更新候補をまとめて座標圧縮する。登録外の値への更新は panic。
+    #[inline]
+    pub fn with_universe(values: &[i64], candidates: &[i64]) -> Self {
+        let mut all = Vec::with_capacity(values.len() + candidates.len());
+        all.extend_from_slice(values);
+        all.extend_from_slice(candidates);
+        return Self::build(values, DynamicWaveletDomain::Compressed(CoordinateCompression::new(&all)));
+    }
+
+    #[inline]
+    fn build(values: &[i64], domain: DynamicWaveletDomain) -> Self {
+        let max_key = domain.size().saturating_sub(1) as u64;
+        let width = (u64::BITS - max_key.leading_zeros()) as usize;
+        let mut order: Vec<_> = values.iter().map(|&x| domain.key(x).expect("初期値が値域外です")).collect();
+        let mut next = vec![0; order.len()];
+        let mut levels = Vec::with_capacity(width);
+        for bit in (0..width).rev() {
+            let flag = |key: u64| (key >> bit) & 1 != 0;
+            let level = DynamicBits::from_bits(order.iter().map(|&key| flag(key)));
+            // 静的版と同じ安定分割。保存するビット列を動的にした点が異なる。
+            let (mut left, mut right) = (0, level.zeros());
+            for &key in &order {
+                if flag(key) {
+                    next[right] = key;
+                    right += 1;
+                } else {
+                    next[left] = key;
+                    left += 1;
+                }
+            }
+            swap(&mut order, &mut next);
+            levels.push(level);
+        }
+        return Self {
+            domain,
+            levels,
+            len: values.len(),
+        };
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        return self.len;
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        return self.len == 0;
+    }
+
+    #[inline]
+    fn check_range(&self, l: usize, r: usize) {
+        assert!(
+            l <= r && r <= self.len,
+            "位置区間 [{l}, {r}) が配列長 {} の範囲外です",
+            self.len
+        );
+    }
+
+    #[inline]
+    fn position_after_split(index: usize, ones: usize, bit: bool, zeros: usize) -> usize {
+        return if bit { zeros + ones } else { index - ones };
+    }
+
+    #[inline]
+    pub fn get(&self, mut index: usize) -> Option<i64> {
+        returnif!(index >= self.len, None);
+        let mut key = 0;
+        for level in &self.levels {
+            let (bit, ones) = level.root.access(index);
+            key = (key << 1) | u64::from(bit);
+            index = Self::position_after_split(index, ones, bit, level.zeros());
+        }
+        return Some(self.domain.decode(key));
+    }
+
+    /// index の直前に挿入する。index == len なら末尾への追加。
+    #[inline]
+    pub fn insert(&mut self, mut index: usize, value: i64) {
+        assert!(index <= self.len, "挿入位置が配列長の範囲外です");
+        let key = self.domain.key(value).expect("挿入する値が値域外です");
+        for (d, level) in (0..self.levels.len()).rev().zip(&mut self.levels) {
+            let bit = (key >> d) & 1 != 0;
+            let ones = level.root.insert(index, bit);
+            index = Self::position_after_split(index, ones, bit, level.zeros());
+            level.compact_if_sparse();
+        }
+        self.len += 1;
+    }
+
+    /// 元の値を返す。添字が存在しなければ None。
+    #[inline]
+    pub fn remove(&mut self, mut index: usize) -> Option<i64> {
+        if index >= self.len {
+            return None;
+        }
+        let mut key = 0;
+        for level in &mut self.levels {
+            let zeros = level.zeros();
+            let (bit, ones) = level.root.remove(index);
+            key = (key << 1) | u64::from(bit);
+            // 消す要素がどこにいたかは、分割前の配列の情報で求める。
+            index = Self::position_after_split(index, ones, bit, zeros);
+            level.compact_if_sparse();
+        }
+        self.len -= 1;
+        return Some(self.domain.decode(key));
+    }
+
+    /// 点代入して元の値を返す。添字が存在しなければ None。
+    #[inline]
+    pub fn set(&mut self, index: usize, value: i64) -> Option<i64> {
+        if index >= self.len {
+            return None;
+        }
+        let new_key = self.domain.key(value).expect("代入する値が値域外です");
+        let mut old_key = 0;
+        let (mut old_pos, mut new_pos) = (index, index);
+        let mut diverged = false;
+        let width = self.levels.len();
+        for (d, level) in (0..width).rev().zip(&mut self.levels) {
+            let new_bit = (new_key >> d) & 1 != 0;
+            let old_zeros = level.zeros();
+            let (old_bit, old_ones, new_ones) = if diverged {
+                // 旧位置は更新前の列、新位置は更新後の列での添字。
+                // 旧要素を消した列への挿入添字は、新位置と同じ。
+                let (old_bit, before) = level.root.remove(old_pos);
+                let after = level.root.insert(new_pos, new_bit);
+                level.compact_if_sparse();
+                (old_bit, before, after)
+            } else {
+                // 共通の上位ビットでは位置が一致する。最初の相違も
+                // 同じ位置でのビット反転で処理できる。
+                let (old_bit, ones) = level.root.replace(old_pos, new_bit);
+                diverged = old_bit != new_bit;
+                (old_bit, ones, ones)
+            };
+            old_key = (old_key << 1) | u64::from(old_bit);
+            old_pos = Self::position_after_split(old_pos, old_ones, old_bit, old_zeros);
+            new_pos = Self::position_after_split(new_pos, new_ones, new_bit, level.zeros());
+        }
+        return Some(self.domain.decode(old_key));
+    }
+
+    #[inline]
+    fn follow(&self, mut l: usize, mut r: usize, key: u64) -> (usize, usize) {
+        for (bit, level) in (0..self.levels.len()).rev().zip(&self.levels) {
+            if l == r {
+                break;
+            }
+            (l, r) = level.split(l, r)[((key >> bit) & 1) as usize];
+        }
+        return (l, r);
+    }
+
+    #[inline]
+    fn restore_index(&self, key: u64, mut index: usize) -> usize {
+        for (bit, level) in self.levels.iter().rev().enumerate() {
+            let flag = (key >> bit) & 1 != 0;
+            let k = if flag { index - level.zeros() } else { index };
+            index = level.root.select(flag, k);
+        }
+        return index;
+    }
+
+    #[inline]
+    pub fn occurrences(&self, l: usize, r: usize, x: i64) -> usize {
+        self.check_range(l, r);
+        let Some(key) = self.domain.key(x) else { return 0 };
+        let (start, end) = self.follow(l, r, key);
+        return end - start;
+    }
+
+    /// 接頭辞 [0, r) にある x の出現回数。
+    #[inline]
+    pub fn rank(&self, r: usize, x: i64) -> usize {
+        return self.occurrences(0, r, x);
+    }
+
+    /// 区間内で左から k 番目の x の添字。
+    #[inline]
+    pub fn select(&self, l: usize, r: usize, x: i64, k: usize) -> Option<usize> {
+        self.check_range(l, r);
+        let key = self.domain.key(x)?;
+        let (start, end) = self.follow(l, r, key);
+        return (k < end - start).then(|| self.restore_index(key, start + k));
+    }
+
+    #[inline]
+    fn count_lt_key(&self, mut l: usize, mut r: usize, upper: u128) -> usize {
+        self.check_range(l, r);
+        if upper >= self.domain.size() {
+            return r - l;
+        }
+        returnif!(upper == 0, 0);
+        let mut count = 0;
+        for (bit, level) in (0..self.levels.len()).rev().zip(&self.levels) {
+            let [zero, one] = level.split(l, r);
+            (l, r) = if (upper >> bit) & 1 == 0 {
+                zero
+            } else {
+                count += zero.1 - zero.0;
+                one
+            };
+        }
+        return count;
+    }
+
+    #[inline]
+    pub fn count_lt(&self, l: usize, r: usize, x: i64) -> usize {
+        return self.count_lt_key(l, r, self.domain.bound(x, false));
+    }
+
+    #[inline]
+    pub fn count_le(&self, l: usize, r: usize, x: i64) -> usize {
+        return self.count_lt_key(l, r, self.domain.bound(x, true));
+    }
+
+    /// 位置が [l, r)、値が [low, high) に入る出現数。
+    #[inline]
+    pub fn range_freq(&self, l: usize, r: usize, low: i64, high: i64) -> usize {
+        assert!(low <= high, "値域の下限が上限を超えています");
+        return self.count_lt(l, r, high) - self.count_lt(l, r, low);
+    }
+
+    #[inline]
+    fn kth(&self, mut l: usize, mut r: usize, mut k: usize, largest: bool) -> Option<(u64, usize)> {
+        self.check_range(l, r);
+        returnif!(k >= r - l, None);
+        let mut key = 0;
+        for level in &self.levels {
+            let sides = level.split(l, r);
+            let first = usize::from(largest);
+            let count = sides[first].1 - sides[first].0;
+            let side = if k < count {
+                first
+            } else {
+                k -= count;
+                1 - first
+            };
+            key = (key << 1) | side as u64;
+            (l, r) = sides[side];
+        }
+        return Some((key, l + k));
+    }
+
+    #[inline]
+    pub fn kth_smallest(&self, l: usize, r: usize, k: usize) -> Option<i64> {
+        return self.kth(l, r, k, false).map(|(key, _)| self.domain.decode(key));
+    }
+
+    #[inline]
+    pub fn kth_largest(&self, l: usize, r: usize, k: usize) -> Option<i64> {
+        return self.kth(l, r, k, true).map(|(key, _)| self.domain.decode(key));
+    }
+
+    /// 同じ値の中では元の添字が小さい方を先に数える。
+    #[inline]
+    pub fn kth_smallest_with_index(&self, l: usize, r: usize, k: usize) -> Option<(i64, usize)> {
+        let (key, pos) = self.kth(l, r, k, false)?;
+        return Some((self.domain.decode(key), self.restore_index(key, pos)));
+    }
+
+    /// 同じ値の中では元の添字が小さい方を先に数える。
+    #[inline]
+    pub fn kth_largest_with_index(&self, l: usize, r: usize, k: usize) -> Option<(i64, usize)> {
+        let (key, pos) = self.kth(l, r, k, true)?;
+        return Some((self.domain.decode(key), self.restore_index(key, pos)));
+    }
+
+    #[inline]
+    pub fn min(&self, l: usize, r: usize) -> Option<i64> {
+        return self.kth_smallest(l, r, 0);
+    }
+
+    #[inline]
+    pub fn max(&self, l: usize, r: usize) -> Option<i64> {
+        return self.kth_largest(l, r, 0);
+    }
+
+    /// x 未満の最大値。
+    #[inline]
+    pub fn prev(&self, l: usize, r: usize, x: i64) -> Option<i64> {
+        return self.kth_smallest(l, r, self.count_lt(l, r, x).checked_sub(1)?);
+    }
+
+    /// x 以上の最小値。
+    #[inline]
+    pub fn next(&self, l: usize, r: usize, x: i64) -> Option<i64> {
+        return self.kth_smallest(l, r, self.count_lt(l, r, x));
+    }
+}

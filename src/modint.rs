@@ -1,0 +1,502 @@
+// ModInt
+#![allow(non_snake_case)]
+#![allow(unused)]
+#![allow(clippy::bool_comparison)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::doc_lazy_continuation)]
+#![allow(clippy::items_after_test_module)]
+#![allow(clippy::needless_late_init)]
+#![allow(clippy::needless_lifetimes)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::needless_return)]
+#![allow(clippy::new_without_default)]
+#![allow(clippy::only_used_in_recursion)]
+#![allow(clippy::ptr_arg)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::unnecessary_sort_by)]
+#![allow(clippy::wrong_self_convention)]
+#![allow(clippy::zero_repeat_side_effects)]
+
+use num_complex::*;
+use num_rational::*;
+use std::cmp;
+use std::cmp::*;
+use std::collections::*;
+use std::f64::consts::*;
+use std::fmt;
+use std::fmt::{Debug, Display};
+use std::io::{self, BufWriter, Read, Write};
+use std::iter::*;
+use std::marker::*;
+use std::mem::*;
+use std::ops::*;
+use std::str::FromStr;
+
+// 1行でのbreak, continue, return
+macro_rules! breakif {
+    ($c:expr) => {
+        if $c {
+            break;
+        }
+    };
+    ($c:expr, $l:lifetime) => {
+        if $c {
+            break $l;
+        }
+    };
+}
+macro_rules! continueif {
+    ($c:expr) => {
+        if $c {
+            continue;
+        }
+    };
+    ($c:expr, $l:lifetime) => {
+        if $c {
+            continue $l;
+        }
+    };
+}
+macro_rules! returnif {
+    ($c:expr) => {
+        if $c {
+            return;
+        }
+    };
+    ($c:expr, $v:expr) => {
+        if $c {
+            return $v;
+        }
+    };
+}
+
+const M107: i64 = 1000000007_i64;
+const M998: i64 = 998244353_i64;
+const L108: i64 = 100_000_000_i64;
+const I108: i32 = 100_000_000_i32;
+const L1018: i64 = 1_000_000_000_000_000_000_i64;
+const IINF: i32 = (1_i32 << 29) - 1;
+const LINF: i64 = (1_i64 << 61) - 1;
+const UINF: usize = (1_usize << 61) - 1;
+
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+//
+//                                        ModInt
+//
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/modint.rs
+
+/// 固定法の整数。対応する法は 2..=2^31-1
+/// value は常に 0..MOD
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ModInt<const MOD: u32> {
+    value: u32,
+}
+
+impl<const MOD: u32> ModInt<MOD> {
+    // 使用時に定数評価されるため、演算ごとの実行時チェック不要
+    const CHECK_MOD: () = assert!(2 <= MOD && MOD <= i32::MAX as u32);
+
+    pub const ZERO: Self = {
+        let () = Self::CHECK_MOD;
+        Self {
+            value: 0,
+        }
+    };
+
+    pub const ONE: Self = {
+        let () = Self::CHECK_MOD;
+        Self {
+            value: 1,
+        }
+    };
+
+    /// 整数を正規化して生成。負の値にも対応
+    #[inline]
+    pub fn new<T: Into<Self>>(value: T) -> Self {
+        return value.into();
+    }
+
+    /// 正規化済みの値から生成。剰余計算は行わない
+    /// value >= MOD は debug ビルドでのみ panic（release ではチェックしない）
+    #[inline]
+    pub const fn raw(value: u32) -> Self {
+        let () = Self::CHECK_MOD;
+        debug_assert!(value < MOD, "値は法未満にしてねー(´・ω・｀)");
+        return Self {
+            value,
+        };
+    }
+
+    #[inline]
+    pub const fn val(self) -> u32 {
+        return self.value;
+    }
+
+    #[inline]
+    pub const fn modulus() -> u32 {
+        let () = Self::CHECK_MOD;
+        return MOD;
+    }
+
+    // ---------- 演算の本体（const fn なのでコンパイル時テーブルにも使える） ----------
+
+    #[inline]
+    const fn add_impl(self, rhs: Self) -> Self {
+        // MOD <= 2^31-1 のため u32 に収まる。cmov になる
+        let v = self.value + rhs.value;
+        return Self {
+            value: if v >= MOD { v - MOD } else { v },
+        };
+    }
+
+    #[inline]
+    const fn sub_impl(self, rhs: Self) -> Self {
+        let value = if self.value >= rhs.value { self.value - rhs.value } else { self.value + MOD - rhs.value };
+        return Self {
+            value,
+        };
+    }
+
+    #[inline]
+    const fn mul_impl(self, rhs: Self) -> Self {
+        // MOD はコンパイル時定数なので、% は逆数乗算に最適化される
+        return Self {
+            value: (self.value as u64 * rhs.value as u64 % MOD as u64) as u32,
+        };
+    }
+
+    #[inline]
+    const fn div_impl(self, rhs: Self) -> Self {
+        return self.mul_impl(rhs.inv());
+    }
+
+    #[inline]
+    const fn neg_impl(self) -> Self {
+        return Self {
+            value: if self.value == 0 { 0 } else { MOD - self.value },
+        };
+    }
+
+    /// 繰り返し二乗法 O(log exp)。0^0 = 1
+    #[inline]
+    pub const fn pow(self, mut exponent: u64) -> Self {
+        let mut base = self;
+        let mut result = Self::ONE;
+        while exponent > 0 {
+            if (exponent & 1) != 0 {
+                result = result.mul_impl(base);
+            }
+            base = base.mul_impl(base);
+            exponent >>= 1;
+        }
+        return result;
+    }
+
+    /// 逆元 O(log MOD)。存在しなければ None
+    /// 法が合成数でも gcd(value, MOD) == 1 なら使用可能
+    pub const fn checked_inv(self) -> Option<Self> {
+        // 除算は 32bit で行い、係数だけ i64 で持つ
+        let mut a = MOD;
+        let mut b = self.value;
+        let mut x = 0_i64;
+        let mut y = 1_i64;
+
+        while b != 0 {
+            let q = a / b;
+            let r = a - q * b;
+            a = b;
+            b = r;
+            let ny = x - q as i64 * y;
+            x = y;
+            y = ny;
+        }
+        returnif!(a != 1, None);
+
+        // この係数は -MOD < x < MOD に収まるので剰余計算不要
+        let value = if x < 0 { x + MOD as i64 } else { x };
+        return Some(Self {
+            value: value as u32,
+        });
+    }
+
+    /// 逆元。存在しなければ panic
+    #[inline]
+    pub const fn inv(self) -> Self {
+        return match self.checked_inv() {
+            Some(v) => v,
+            None => panic!("逆元が存在しないよー(´・ω・｀)"),
+        };
+    }
+}
+
+// ---------- 整数からの変換 ----------
+
+// 入力型の範囲を保てる整数型で正規化する。
+// 普通の整数の変換に i128/u128 の剰余計算を持ち込まない。
+macro_rules! impl_modint_from {
+    ($wide:ty; $($t:ty),+ $(,)?) => {
+        $(
+            impl<const MOD: u32> From<$t> for ModInt<MOD> {
+                #[inline]
+                fn from(value: $t) -> Self {
+                    let () = Self::CHECK_MOD;
+                    Self {
+                        value: (value as $wide).rem_euclid(MOD as $wide) as u32,
+                    }
+                }
+            }
+        )+
+    };
+}
+
+impl_modint_from!(i64; i8, i16, i32, i64, isize);
+impl_modint_from!(u64; u8, u16, u32, u64, usize);
+impl_modint_from!(i128; i128);
+impl_modint_from!(u128; u128);
+
+// `a + &b` を書けるようにする
+impl<'a, const MOD: u32> From<&'a ModInt<MOD>> for ModInt<MOD> {
+    #[inline]
+    fn from(value: &'a ModInt<MOD>) -> Self {
+        return *value;
+    }
+}
+
+// ---------- 四則演算 ----------
+// 右辺は Into<ModInt> なら何でも可: x + y, x * 2, x -= 1, x / &y など
+// 左辺は値と参照の両方に対応: &x + 1 など
+
+macro_rules! impl_modint_binop {
+    ($trait:ident, $method:ident, $assign_trait:ident, $assign_method:ident, $body:ident) => {
+        impl<const MOD: u32, T: Into<ModInt<MOD>>> $trait<T> for ModInt<MOD> {
+            type Output = ModInt<MOD>;
+            #[inline]
+            fn $method(self, rhs: T) -> ModInt<MOD> {
+                return self.$body(rhs.into());
+            }
+        }
+
+        impl<'a, const MOD: u32, T: Into<ModInt<MOD>>> $trait<T> for &'a ModInt<MOD> {
+            type Output = ModInt<MOD>;
+            #[inline]
+            fn $method(self, rhs: T) -> ModInt<MOD> {
+                return (*self).$body(rhs.into());
+            }
+        }
+
+        impl<const MOD: u32, T: Into<ModInt<MOD>>> $assign_trait<T> for ModInt<MOD> {
+            #[inline]
+            fn $assign_method(&mut self, rhs: T) {
+                *self = (*self).$body(rhs.into());
+            }
+        }
+    };
+}
+
+impl_modint_binop!(Add, add, AddAssign, add_assign, add_impl);
+impl_modint_binop!(Sub, sub, SubAssign, sub_assign, sub_impl);
+impl_modint_binop!(Mul, mul, MulAssign, mul_assign, mul_impl);
+impl_modint_binop!(Div, div, DivAssign, div_assign, div_impl);
+
+impl<const MOD: u32> Neg for ModInt<MOD> {
+    type Output = Self;
+    #[inline]
+    fn neg(self) -> Self {
+        return self.neg_impl();
+    }
+}
+
+impl<'a, const MOD: u32> Neg for &'a ModInt<MOD> {
+    type Output = ModInt<MOD>;
+    #[inline]
+    fn neg(self) -> ModInt<MOD> {
+        return (*self).neg_impl();
+    }
+}
+
+// ---------- イテレータ ----------
+
+impl<const MOD: u32> Sum for ModInt<MOD> {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        return iter.fold(Self::ZERO, |a, b| a.add_impl(b));
+    }
+}
+
+impl<'a, const MOD: u32> Sum<&'a Self> for ModInt<MOD> {
+    fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+        return iter.fold(Self::ZERO, |a, b| a.add_impl(*b));
+    }
+}
+
+impl<const MOD: u32> Product for ModInt<MOD> {
+    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+        return iter.fold(Self::ONE, |a, b| a.mul_impl(b));
+    }
+}
+
+impl<'a, const MOD: u32> Product<&'a Self> for ModInt<MOD> {
+    fn product<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+        return iter.fold(Self::ONE, |a, b| a.mul_impl(*b));
+    }
+}
+
+// ---------- その他のトレイト ----------
+
+impl<const MOD: u32> Default for ModInt<MOD> {
+    #[inline]
+    fn default() -> Self {
+        return Self::ZERO;
+    }
+}
+
+impl<const MOD: u32> fmt::Display for ModInt<MOD> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        return fmt::Display::fmt(&self.value, f);
+    }
+}
+
+// dbg! で値だけ表示する
+impl<const MOD: u32> fmt::Debug for ModInt<MOD> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        return fmt::Debug::fmt(&self.value, f);
+    }
+}
+
+// ---------- 数字列からの生成 ----------
+
+impl<const MOD: u32> ModInt<MOD> {
+    /// 10進の数字列（先頭に '+' / '-' 可）から生成。
+    /// Vec<u8>, &[u8], &Vec<u8>, &str, String など AsRef<[u8]> なら何でも渡せる。
+    /// 1桁ずつ処理するので、i64 に収まらない巨大な数字列も読める
+    pub fn try_from_bytes<B: AsRef<[u8]>>(bytes: B) -> Result<Self, String> {
+        let bytes = bytes.as_ref();
+        let (neg, digits) = match bytes.split_first() {
+            Some((b'-', rest)) => (true, rest),
+            Some((b'+', rest)) => (false, rest),
+            _ => (false, bytes),
+        };
+
+        let error = || format!("数値じゃないよー(´・ω・｀): {:?}", String::from_utf8_lossy(bytes));
+        returnif!(digits.is_empty(), Err(error()));
+
+        let ten = Self::raw(10 % MOD);
+        let mut v = Self::ZERO;
+        for &c in digits {
+            if !c.is_ascii_digit() {
+                return Err(error());
+            }
+            v = v.mul_impl(ten).add_impl(Self::raw((c - b'0') as u32 % MOD));
+        }
+        return Ok(if neg { v.neg_impl() } else { v });
+    }
+
+    /// try_from_bytes の panic 版。不正な入力なら panic
+    #[inline]
+    pub fn from_bytes<B: AsRef<[u8]>>(bytes: B) -> Self {
+        return match Self::try_from_bytes(bytes) {
+            Ok(v) => v,
+            Err(e) => panic!("{e}"),
+        };
+    }
+}
+
+/// proconio の input! で直接読める
+impl<const MOD: u32> FromStr for ModInt<MOD> {
+    type Err = String;
+
+    #[inline]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        return Self::try_from_bytes(s);
+    }
+}
+
+// ======================================================================================
+//
+//                               Permutation / Combination
+//
+// ======================================================================================
+
+/// 階乗と逆階乗を前計算し、順列 nPr と組合せ nCr を O(1) で求める。
+///
+/// 前提：MOD は素数で、max_n < MOD であること。
+/// 構築：O(max_n + log MOD)、メモリ：O(max_n)
+/// 各クエリ：O(1)
+///
+/// ```
+/// use utility_rust::modint::Combinatorics;
+///
+/// let comb = Combinatorics::<998244353>::new(10);
+/// assert_eq!(comb.permutation(5, 2).val(), 20);
+/// assert_eq!(comb.combination(5, 2).val(), 10);
+/// ```
+pub struct Combinatorics<const MOD: u32> {
+    fact: Vec<ModInt<MOD>>,
+    inv_fact: Vec<ModInt<MOD>>,
+}
+
+impl<const MOD: u32> Combinatorics<MOD> {
+    /// 0! から max_n! までの階乗・逆階乗を構築する。
+    pub fn new(max_n: usize) -> Self {
+        // 素数 MOD のもとで n! の逆元を利用するので、n < MOD が必要。
+        assert!(max_n < MOD as usize, "max_n は MOD 未満にしてください");
+
+        // fact[i] = i!
+        let mut fact = vec![ModInt::<MOD>::ONE; max_n + 1];
+        for i in 1..=max_n {
+            fact[i] = fact[i - 1] * i;
+        }
+
+        // inv_fact[i] = 1 / i!
+        // 逆元は max_n! に対して一度だけ計算し、残りは逆順に求める。
+        let mut inv_fact = vec![ModInt::<MOD>::ONE; max_n + 1];
+        inv_fact[max_n] = fact[max_n].inv();
+        for i in (1..=max_n).rev() {
+            inv_fact[i - 1] = inv_fact[i] * i;
+        }
+
+        return Self {
+            fact,
+            inv_fact,
+        };
+    }
+
+    /// n! を O(1) で取得する。
+    #[inline]
+    pub fn factorial(&self, n: usize) -> ModInt<MOD> {
+        return self.fact[n];
+    }
+
+    /// nPr = n! / (n-r)! を O(1) で取得する。
+    /// r > n の場合は 0 を返す。
+    #[inline]
+    pub fn permutation(&self, n: usize, r: usize) -> ModInt<MOD> {
+        assert!(n < self.fact.len(), "n が前計算の範囲を超えています");
+        if r > n {
+            return ModInt::<MOD>::ZERO;
+        }
+        return self.fact[n] * self.inv_fact[n - r];
+    }
+
+    /// nCr = n! / (r! * (n-r)!) を O(1) で取得する。
+    /// r > n の場合は 0 を返す。
+    #[inline]
+    pub fn combination(&self, n: usize, r: usize) -> ModInt<MOD> {
+        assert!(n < self.fact.len(), "n が前計算の範囲を超えています");
+        if r > n {
+            return ModInt::<MOD>::ZERO;
+        }
+        return self.fact[n] * self.inv_fact[r] * self.inv_fact[n - r];
+    }
+}
+
+pub type ModInt998 = ModInt<998244353>;
+pub type ModInt107 = ModInt<1000000007>;

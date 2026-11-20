@@ -1,0 +1,1054 @@
+// mod行列・行列群
+#![allow(non_snake_case)]
+#![allow(unused)]
+#![allow(clippy::bool_comparison)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::doc_lazy_continuation)]
+#![allow(clippy::items_after_test_module)]
+#![allow(clippy::needless_late_init)]
+#![allow(clippy::needless_lifetimes)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::needless_return)]
+#![allow(clippy::new_without_default)]
+#![allow(clippy::only_used_in_recursion)]
+#![allow(clippy::ptr_arg)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::unnecessary_sort_by)]
+#![allow(clippy::wrong_self_convention)]
+#![allow(clippy::zero_repeat_side_effects)]
+
+use num_complex::*;
+use num_rational::*;
+use std::cmp;
+use std::cmp::*;
+use std::collections::*;
+use std::f64::consts::*;
+use std::fmt;
+use std::fmt::{Debug, Display};
+use std::io::{self, BufWriter, Read, Write};
+use std::iter::*;
+use std::marker::*;
+use std::mem::*;
+use std::ops::*;
+use std::str::FromStr;
+
+// 1行でのbreak, continue, return
+macro_rules! breakif {
+    ($c:expr) => {
+        if $c {
+            break;
+        }
+    };
+    ($c:expr, $l:lifetime) => {
+        if $c {
+            break $l;
+        }
+    };
+}
+macro_rules! continueif {
+    ($c:expr) => {
+        if $c {
+            continue;
+        }
+    };
+    ($c:expr, $l:lifetime) => {
+        if $c {
+            continue $l;
+        }
+    };
+}
+macro_rules! returnif {
+    ($c:expr) => {
+        if $c {
+            return;
+        }
+    };
+    ($c:expr, $v:expr) => {
+        if $c {
+            return $v;
+        }
+    };
+}
+
+const M107: i64 = 1000000007_i64;
+const M998: i64 = 998244353_i64;
+const L108: i64 = 100_000_000_i64;
+const I108: i32 = 100_000_000_i32;
+const L1018: i64 = 1_000_000_000_000_000_000_i64;
+const IINF: i32 = (1_i32 << 29) - 1;
+const LINF: i64 = (1_i64 << 61) - 1;
+const UINF: usize = (1_usize << 61) - 1;
+
+use crate::monoid_group_abelian::*;
+
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+//
+//                                   mod行列・行列群
+//
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/matrix.rs
+
+pub const DEFAULT_MATRIX_MOD: u32 = 998244353;
+
+/// u32全域に対応するMiller-Rabinの基数
+pub const MILLER_RABIN_BASES: [u32; 3] = [2, 7, 61];
+
+/// 繰り返し二乗法
+#[inline(always)]
+pub const fn mod_pow(a: u32, mut n: u32, m: u32) -> u32 {
+    // 乗算時のオーバーフローを防ぐためu64を使用
+    let modulo = m as u64;
+    let mut a = a as u64 % modulo;
+    let mut result = 1_u64 % modulo;
+    while n > 0 {
+        if (n & 1) == 1 {
+            result = (result * a) % modulo;
+        }
+        n >>= 1;
+        a = (a * a) % modulo;
+    }
+    return result as u32;
+} // end of method
+
+/// Miller-Rabinの素数判定
+#[inline(always)]
+pub const fn is_prime(n: u32) -> bool {
+    returnif!(n <= 1, false);
+    returnif!((n & 1) == 0, n == 2);
+
+    let s = (n - 1).trailing_zeros();
+    let d = (n - 1) >> s;
+
+    // const fnではforを使用できないためwhileで走査
+    let mut i = 0;
+    while i < MILLER_RABIN_BASES.len() {
+        let base = MILLER_RABIN_BASES[i];
+        i += 1;
+        let a = base % n;
+        continueif!(a == 0);
+        let mut x = mod_pow(a, d, n);
+        continueif!(x == 1 || x == n - 1);
+
+        let mut ok = false;
+        let mut j = 1;
+        while j < s {
+            x = ((x as u64 * x as u64) % n as u64) as u32;
+            if x == n - 1 {
+                ok = true;
+                break;
+            }
+            j += 1;
+        }
+        // n-1にならなければ合成数
+        returnif!(!ok, false);
+    }
+    return true;
+} // end of method
+
+/// 型ごとの関連constを値の生成時に参照
+/// 合成数の法はコード生成時(cargo build/test)に拒否される
+struct Arithmetic<const MOD: u32>;
+
+impl<const MOD: u32> Arithmetic<MOD> {
+    const VALID: () = {
+        assert!(MOD >= 2 && MOD <= i32::MAX as u32, "法は2以上i32::MAX以下にしてください");
+        assert!(is_prime(MOD), "法には素数を指定してください");
+    };
+
+    #[inline(always)]
+    fn add(a: u32, b: u32) -> u32 {
+        let sum = a + b;
+        return if sum >= MOD { sum - MOD } else { sum };
+    } // end of method
+
+    #[inline(always)]
+    fn sub(a: u32, b: u32) -> u32 {
+        return if a >= b { a - b } else { a + MOD - b };
+    } // end of method
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn neg(a: u32) -> u32 { if a == 0 { 0 } else { MOD - a } }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn mul(a: u32, b: u32) -> u32 { ((a as u64) * (b as u64) % (MOD as u64)) as u32}
+
+    #[inline(always)]
+    fn pow(mut base: u32, mut exp: u64) -> u32 {
+        let mut result = 1;
+        while exp > 0 {
+            if (exp & 1) != 0 {
+                result = Self::mul(result, base);
+            }
+            exp >>= 1;
+            if exp > 0 {
+                base = Self::mul(base, base);
+            }
+        }
+        return result;
+    } // end of method
+
+    #[inline(always)]
+    fn inverse(value: u32) -> u32 {
+        let () = Self::VALID;
+        assert!(value != 0 && value < MOD, "逆元には正規化した非零の値が必要です");
+        Self::pow(value, (MOD - 2) as u64)
+    } // end of method
+
+    #[inline(always)]
+    fn dot2(a: u32, b: u32, c: u32, d: u32) -> u32 {
+        // 2*(MOD-1)^2 < 2^63なので、2項をまとめてもu64に収まる。
+        return (((a as u64) * (b as u64) + (c as u64) * (d as u64)) % (MOD as u64)) as u32;
+    } // end of method
+} // end of impl Arithmetic
+
+/// モノイドの繰り返し二乗法
+/// valueは設定値や次元も含めてmonoidの対象集合に属すること
+pub fn monoid_pow<M: Monoid>(monoid: &M, value: &M::S, mut exp: u64) -> M::S
+where
+    M::S: Clone,
+{
+    let mut result = monoid.identity();
+    let mut base = value.clone();
+    while exp > 0 {
+        if (exp & 1) != 0 {
+            result = monoid.combine(&result, &base);
+        }
+        exp >>= 1;
+        if exp > 0 {
+            base = monoid.combine(&base, &base);
+        }
+    }
+    return result;
+} // end of method
+
+/// 群の正負の整数乗, i64::MINにも対応
+/// valueは設定値や次元も含めてgroupの対象集合に属する
+pub fn group_pow<G: Group>(group: &G, value: &G::S, exp: i64) -> G::S
+where
+    G::S: Clone,
+{
+    let base = if exp < 0 { group.inverse(value) } else { value.clone() };
+    return monoid_pow(group, &base, exp.unsigned_abs());
+} // end of method
+
+/// 固定長2×2行列。成分は非公開で、常に[0,MOD)。
+///
+/// ```
+/// use utility_rust::matrix::Matrix2;
+/// let a: Matrix2 = Matrix2::new(1, 1, 1, 0);
+/// assert_eq!(a.pow(10), Matrix2::new(89, 55, 55, 34));
+/// assert_eq!(a.pow_signed(-1).unwrap() * a, Matrix2::identity());
+/// ```
+///
+/// 合成数の法では、値を生成するコードのビルドを拒否する。
+/// ```compile_fail,E0080
+/// use utility_rust::matrix::Matrix2;
+/// let _ = Matrix2::<9>::identity();
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Matrix2<const MOD: u32 = DEFAULT_MATRIX_MOD> {
+    data: [u32; 4],
+}
+
+impl<const MOD: u32> Matrix2<MOD> {
+    #[inline(always)]
+    pub fn new(a: u64, b: u64, c: u64, d: u64) -> Self {
+        let () = Arithmetic::<MOD>::VALID;
+        Self {
+            data: [(a % MOD as u64) as u32, (b % MOD as u64) as u32, (c % MOD as u64) as u32, (d % MOD as u64) as u32],
+        }
+    } // end of constructor
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn zero() -> Self {
+        let () = Arithmetic::<MOD>::VALID;
+        return Self { data: [0; 4] };
+    } // end of method
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn identity() -> Self {
+        let () = Arithmetic::<MOD>::VALID;
+        return Self { data: [1, 0, 0, 1] };
+    } // end of method
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn to_rows(self) -> [[u32; 2]; 2] { [[self.data[0], self.data[1]], [self.data[2], self.data[3]]] }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn entries(&self) -> &[u32; 4] { &self.data }
+
+    #[inline(always)]
+    pub fn get(&self, row: usize, col: usize) -> u32 {
+        assert!(row < 2 && col < 2, "添字が行列の範囲外です");
+        return self.data[row * 2 + col];
+    } // end of method
+
+    #[inline(always)]
+    pub fn set(&mut self, row: usize, col: usize, value: u64) {
+        assert!(row < 2 && col < 2, "添字が行列の範囲外です");
+        self.data[row * 2 + col] = (value % MOD as u64) as u32;
+    } // end of method
+
+    #[inline(always)]
+    pub fn multiply(&self, rhs: &Self) -> Self {
+        let [a, b, c, d] = self.data;
+        let [e, f, g, h] = rhs.data;
+        return Self {
+            data: [
+                Arithmetic::<MOD>::dot2(a, e, b, g),
+                Arithmetic::<MOD>::dot2(a, f, b, h),
+                Arithmetic::<MOD>::dot2(c, e, d, g),
+                Arithmetic::<MOD>::dot2(c, f, d, h),
+            ],
+        };
+    } // end of method
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn scale(&self, scalar: u64) -> Self {
+        let scalar = (scalar % MOD as u64) as u32;
+        return Self { data: self.data.map(|x| Arithmetic::<MOD>::mul(x, scalar)) };
+    } // end of method
+
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn transpose(&self) -> Self {
+        let [a, b, c, d] = self.data;
+        return Self { data: [a, c, b, d] }
+    } // end of method
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn trace(&self) -> u32 { Arithmetic::<MOD>::add(self.data[0], self.data[3]) }
+
+    #[inline(always)]
+    pub fn determinant(&self) -> u32 {
+        return Arithmetic::<MOD>::sub(
+            Arithmetic::<MOD>::mul(self.data[0], self.data[3]),
+            Arithmetic::<MOD>::mul(self.data[1], self.data[2]),
+        );
+    } // end of method
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn adjugate(&self) -> Self {
+        let [a, b, c, d] = self.data;
+        return Self { data: [d, Arithmetic::<MOD>::neg(b), Arithmetic::<MOD>::neg(c), a] };
+    } // end of method
+
+    /// 特異行列ならNone。det=1ならmod累乗を省略する。
+    #[inline(always)]
+    pub fn try_inverse(&self) -> Option<Self> {
+        let det = self.determinant();
+        returnif!(det == 0, None);
+        let adjugate = self.adjugate();
+        return if det == 1 { Some(adjugate) } else { Some(adjugate.scale(Arithmetic::<MOD>::inverse(det) as u64)) };
+    } // end of method
+
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn pow(&self, exp: u64) -> Self { monoid_pow(&Matrix2Monoid::<MOD>, self, exp) }
+
+    /// 負の指数で非可逆ならNone。0乗は特異行列でも単位元。
+    #[inline(always)]
+    pub fn pow_signed(&self, exp: i64) -> Option<Self> {
+        if exp < 0 {
+            return Some(self.try_inverse()?.pow(exp.unsigned_abs()));
+        } else {
+            return Some(self.pow(exp as u64));
+        };
+    } // end of method
+
+    /// 列ベクトルに左から作用させる。
+    #[inline(always)]
+    pub fn apply(&self, vector: [u64; 2]) -> [u32; 2] {
+        let x = (vector[0] % MOD as u64) as u32;
+        let y = (vector[1] % MOD as u64) as u32;
+        return [
+            Arithmetic::<MOD>::dot2(self.data[0], x, self.data[1], y),
+            Arithmetic::<MOD>::dot2(self.data[2], x, self.data[3], y),
+        ];
+    } // end of method
+} // end of impl Matrix2
+
+impl<const MOD: u32> Add for Matrix2<MOD> {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self {
+        Self {
+            data: std::array::from_fn(|i| Arithmetic::<MOD>::add(self.data[i], rhs.data[i])),
+        }
+    }
+} // end of impl Add for Matrix2
+
+impl<const MOD: u32> Mul for Matrix2<MOD> {
+    type Output = Self;
+
+    /// 通常の行列積。左辺・右辺の順序を保つ。
+    #[inline(always)]
+    fn mul(self, rhs: Self) -> Self {
+        self.multiply(&rhs)
+    }
+} // end of impl Mul for Matrix2
+
+impl<const MOD: u32> Sub for Matrix2<MOD> {
+    type Output = Self;
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn sub(self, rhs: Self) -> Self {
+        return Self { data: std::array::from_fn(|i| Arithmetic::<MOD>::sub(self.data[i], rhs.data[i])) };
+    } // end of method
+} // end of impl Sub for Matrix2
+
+impl<const MOD: u32> Neg for Matrix2<MOD> {
+    type Output = Self;
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn neg(self) -> Self {
+        return Self { data: self.data.map(Arithmetic::<MOD>::neg) };
+    } // end of method
+} // end of impl Neg for Matrix2
+
+impl<const MOD: u32> AddAssign for Matrix2<MOD> {
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn add_assign(&mut self, rhs: Self) { *self = *self + rhs; }
+} // end of impl AddAssign for Matrix2
+
+impl<const MOD: u32> SubAssign for Matrix2<MOD> {
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn sub_assign(&mut self, rhs: Self) { *self = *self - rhs; }
+} // end of impl SubAssign  for Matrix2
+
+impl<const MOD: u32> MulAssign for Matrix2<MOD> {
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn mul_assign(&mut self, rhs: Self) { *self = self.multiply(&rhs); }
+} // end of impl MulAssign for Matrix2
+
+/// 全2×2行列の積のモノイド。
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Matrix2Monoid<const MOD: u32 = DEFAULT_MATRIX_MOD>;
+impl<const MOD: u32> Monoid for Matrix2Monoid<MOD> {
+    type S = Matrix2<MOD>;
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn identity(&self) -> Self::S { Matrix2::identity() }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn combine(&self, left: &Self::S, right: &Self::S) -> Self::S { left.multiply(right) }
+} // end of impl Monoid for Matrix2Monoid
+
+/// 可逆性を検証済みの2×2行列。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InvertibleMatrix2<const MOD: u32 = DEFAULT_MATRIX_MOD>(Matrix2<MOD>);
+impl<const MOD: u32> InvertibleMatrix2<MOD> {
+    #[inline(always)]
+    pub fn try_new(matrix: Matrix2<MOD>) -> Option<Self> {
+        let () = Arithmetic::<MOD>::VALID;
+        return (matrix.determinant() != 0).then_some(Self(matrix));
+    } // end of constructor
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn identity() -> Self { Self(Matrix2::identity()) }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn as_matrix(&self) -> &Matrix2<MOD> { &self.0 }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn into_matrix(self) -> Matrix2<MOD> { self.0 }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn inverse(&self) -> Self { Self(self.0.try_inverse().expect("可逆行列の内部不変条件違反")) }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn pow(&self,exp: i64) -> Self { group_pow(&Matrix2Group::<MOD>, self, exp) }
+} // end of impl InvertibleMatrix2
+
+impl<const MOD: u32> Mul for InvertibleMatrix2<MOD> {
+    type Output = Self;
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn mul(self, rhs: Self) -> Self { Self(self.0.multiply(&rhs.0)) }
+} // end of impl Mul for InvertibleMatrix2
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Matrix2Group<const MOD: u32 = DEFAULT_MATRIX_MOD>;
+impl<const MOD: u32> Monoid for Matrix2Group<MOD> {
+    type S = InvertibleMatrix2<MOD>;
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn identity(&self) -> Self::S { InvertibleMatrix2::identity() }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn combine(&self, left: &Self::S, right: &Self::S) -> Self::S { *left * *right }
+} // end of impl Monoid for Matrix2Group
+
+impl<const MOD: u32> Group for Matrix2Group<MOD> {
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn inverse(&self, value: &Self::S) -> Self::S { value.inverse() }
+} // end of impl Group for Matrix2Group
+
+/// 行列式1を検証済みの2×2行列。逆元にmod累乗は不要。
+///
+/// ```
+/// use utility_rust::matrix::{Matrix2, Sl2, Sl2Group};
+/// use utility_rust::union_find::PotentialUnionFind;
+/// let mut uf = PotentialUnionFind::new(3, Sl2Group::<998_244_353>);
+/// let x: Sl2 = Sl2::try_new(Matrix2::new(1, 1, 0, 1)).unwrap();
+/// assert!(uf.unite(0, 1, x));
+/// assert_eq!(uf.diff(0, 1), Some(x));
+/// assert_eq!(x.pow(-1), x.inverse());
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Sl2<const MOD: u32 = DEFAULT_MATRIX_MOD>(Matrix2<MOD>);
+
+impl<const MOD: u32> Sl2<MOD> {
+    #[inline(always)]
+    pub fn try_new(matrix: Matrix2<MOD>) -> Option<Self> {
+        let () = Arithmetic::<MOD>::VALID;
+        return (matrix.determinant() == 1).then_some(Self(matrix));
+    } // end of constructor
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn identity() -> Self { Self(Matrix2::identity()) }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn as_matrix(&self) -> &Matrix2<MOD> { &self.0 }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn into_matrix(self) -> Matrix2<MOD> { self.0 }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn inverse(&self) -> Self { Self(self.0.adjugate()) }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn pow(&self, exp: i64) -> Self { group_pow(&Sl2Group::<MOD>, self, exp) }
+} // end of impl Sl2
+
+impl<const MOD: u32> Mul for Sl2<MOD> {
+    type Output = Self;
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn mul(self, rhs: Self) -> Self { Self(self.0.multiply(&rhs.0)) }
+} // end of impl Mul for Sl2
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Sl2Group<const MOD: u32 = DEFAULT_MATRIX_MOD>;
+impl<const MOD: u32> Monoid for Sl2Group<MOD> {
+    type S = Sl2<MOD>;
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn identity(&self) -> Self::S { Sl2::identity() }
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn combine(&self, left: &Self::S, right: &Self::S) -> Self::S { *left * *right }
+} // end of struct Sl2Group
+
+impl<const MOD: u32> Group for Sl2Group<MOD> {
+    #[rustfmt::skip]
+    #[inline(always)]
+    fn inverse(&self, value: &Self::S) -> Self::S { value.inverse() }
+} // end of impl Group for Sl2Group
+
+/// 実行時に縦横を指定する行列。shapeも等値比較に含む。
+///
+/// 形状の不一致はassertで拒否する。try_inverseは非正方・特異ならNone。
+/// pow_signedは非正方なら拒否し、正方で負の指数の逆元がなければNone。
+///
+/// ```
+/// use utility_rust::matrix::Matrix;
+/// let a: Matrix = Matrix::from_rows(vec![vec![1, 2, 3], vec![4, 5, 6]]);
+/// let b: Matrix = Matrix::from_rows(vec![vec![1], vec![2], vec![3]]);
+/// assert_eq!((&a * &b).to_rows(), vec![vec![14], vec![32]]);
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Matrix<const MOD: u32 = DEFAULT_MATRIX_MOD> {
+    rows: usize,
+    cols: usize,
+    data: Vec<u32>,
+} // end of strut Matrix
+
+impl<const MOD: u32> Matrix<MOD> {
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn zero(rows: usize, cols: usize) -> Self {
+        let () = Arithmetic::<MOD>::VALID;
+        let len = rows.checked_mul(cols).expect("行列の要素数が大きすぎます");
+        return Self { rows, cols, data: vec![0; len] };
+    } // end of method
+
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn identity(size: usize) -> Self {
+        let mut result = Self::zero(size, size);
+        for i in 0..size { result.data[i * size + i] = 1; }
+        return result;
+    } // end of method
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    pub fn from_flat(rows: usize, cols: usize, values: Vec<u64>) -> Self {
+        let () = Arithmetic::<MOD>::VALID;
+        let len = rows.checked_mul(cols).expect("行列の要素数が大きすぎます");
+        assert_eq!(values.len(), len, "形状と要素数が一致していません");
+        return Self { rows, cols, data: values.into_iter().map(|x| (x % MOD as u64) as u32).collect() }
+    } // end of method
+
+    #[inline(always)]
+    pub fn from_rows(values: Vec<Vec<u64>>) -> Self {
+        let rows = values.len();
+        let cols = values.first().map_or(0, Vec::len);
+        debug_assert!(values.iter().all(|row| row.len() == cols), "行の長さをそろえてください");
+        Self::from_flat(rows, cols, values.into_iter().flatten().collect())
+    } // end of method
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    pub fn from_signed_rows(values: Vec<Vec<i64>>) -> Self {
+        let () = Arithmetic::<MOD>::VALID;
+        let rows = values.len();
+        let cols = values.first().map_or(0, Vec::len);
+        debug_assert!(values.iter().all(|row| row.len() == cols), "行の長さをそろえてください");
+        let len = rows.checked_mul(cols).expect("行列の要素数が大きすぎます");
+        let data: Vec<u32> = values.into_iter().flatten().map(|x| x.rem_euclid(MOD as i64) as u32).collect();
+        assert_eq!(data.len(), len);
+        return Self { rows, cols, data };
+    } // end of method
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    pub fn rows(&self) -> usize { self.rows }
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    pub fn cols(&self) -> usize { self.cols }
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    pub fn shape(&self) -> (usize, usize) { (self.rows, self.cols) }
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    pub fn entries(&self) -> &[u32] { &self.data }
+
+    #[inline(always)]
+    pub fn to_rows(&self) -> Vec<Vec<u32>> {
+        return (0..self.rows).map(|i| self.data[i * self.cols..(i + 1) * self.cols].to_vec()).collect();
+    } // end of method
+
+    #[inline(always)]
+    pub fn get(&self, row: usize, col: usize) -> u32 {
+        assert!(row < self.rows && col < self.cols, "添字が行列の範囲外です");
+        self.data[row * self.cols + col]
+    } // end of method
+
+    #[inline(always)]
+    pub fn set(&mut self, row: usize, col: usize, value: u64) {
+        assert!(row < self.rows && col < self.cols, "添字が行列の範囲外です");
+        self.data[row * self.cols + col] = (value % MOD as u64) as u32;
+    } // end of method
+
+    #[inline(always)]
+    pub fn multiply(&self, rhs: &Self) -> Self {
+        assert_eq!(self.cols, rhs.rows, "行列積の次元が一致していません");
+        let mut result = Self::zero(self.rows, rhs.cols);
+        // i,k,j順にして、右辺と出力の行を連続に走査する。
+        for i in 0..self.rows {
+            for k in 0..self.cols {
+                let x = self.data[i * self.cols + k];
+                continueif!(x == 0);
+                let right = &rhs.data[k * rhs.cols..(k + 1) * rhs.cols];
+                let output = &mut result.data[i * rhs.cols..(i + 1) * rhs.cols];
+                for (out, &y) in output.iter_mut().zip(right) {
+                    *out = Arithmetic::<MOD>::add(*out, Arithmetic::<MOD>::mul(x, y));
+                }
+            }
+        }
+        return result;
+    } // end of method
+
+    #[inline(always)]
+    pub fn add(&self, rhs: &Self) -> Self {
+        assert_eq!(self.shape(), rhs.shape(), "加算する行列の形状が一致していません");
+        return Self {
+            rows: self.rows,
+            cols: self.cols,
+            data: self.data.iter().zip(&rhs.data).map(|(&a, &b)| Arithmetic::<MOD>::add(a, b)).collect(),
+        };
+    } // end of method
+
+    #[inline(always)]
+    pub fn subtract(&self, rhs: &Self) -> Self {
+        assert_eq!(self.shape(), rhs.shape(), "減算する行列の形状が一致していません");
+        return Self {
+            rows: self.rows,
+            cols: self.cols,
+            data: self.data.iter().zip(&rhs.data).map(|(&a, &b)| Arithmetic::<MOD>::sub(a, b)).collect(),
+        };
+    } // end of method
+
+    #[inline(always)]
+    pub fn scale(&self, scalar: u64) -> Self {
+        let scalar = (scalar % MOD as u64) as u32;
+        return Self {
+            rows: self.rows,
+            cols: self.cols,
+            data: self.data.iter().map(|&x| Arithmetic::<MOD>::mul(x, scalar)).collect(),
+        };
+    } // end of method
+
+    #[inline(always)]
+    pub fn transpose(&self) -> Self {
+        let mut result = Self::zero(self.cols, self.rows);
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                result.data[j * self.rows + i] = self.data[i * self.cols + j];
+            }
+        }
+        return result;
+    } // end of method
+
+    #[inline(always)]
+    pub fn trace(&self) -> u32 {
+        assert_eq!(self.rows, self.cols, "正方行列が必要です");
+        let mut result = 0;
+        for i in 0..self.rows {
+            result = Arithmetic::<MOD>::add(result, self.data[i * self.cols + i]);
+        }
+        return result;
+    } // end of method
+
+    #[inline(always)]
+    pub fn determinant(&self) -> u32 {
+        assert_eq!(self.rows, self.cols, "正方行列が必要です");
+        let n = self.rows;
+        if n == 2 {
+            return Matrix2::<MOD> {
+                data: [self.data[0], self.data[1], self.data[2], self.data[3]],
+            }
+            .determinant();
+        }
+
+        let mut a = self.clone();
+        let mut det = 1;
+        for col in 0..n {
+            let Some(pivot) = (col..n).find(|&r| a.data[r * n + col] != 0) else {
+                return 0;
+            };
+            if pivot != col {
+                a.swap_rows(pivot, col);
+                det = Arithmetic::<MOD>::neg(det);
+            }
+            let value = a.data[col * n + col];
+            det = Arithmetic::<MOD>::mul(det, value);
+            let inv = Arithmetic::<MOD>::inverse(value);
+            for row in col + 1..n {
+                let factor = Arithmetic::<MOD>::mul(a.data[row * n + col], inv);
+                a.data[row * n + col] = 0;
+                for j in col + 1..n {
+                    a.data[row * n + j] = Arithmetic::<MOD>::sub(
+                        a.data[row * n + j],
+                        Arithmetic::<MOD>::mul(factor, a.data[col * n + j]),
+                    );
+                }
+            }
+        }
+        return det;
+    } // end of method
+
+    /// 非正方行列または特異行列ならNone。
+    pub fn try_inverse(&self) -> Option<Self> {
+        returnif!(self.rows != self.cols, None);
+        let n = self.rows;
+        if n == 2 {
+            let m = Matrix2::<MOD> {
+                data: [self.data[0], self.data[1], self.data[2], self.data[3]],
+            }
+            .try_inverse()?;
+            return Some(Self {
+                rows: 2,
+                cols: 2,
+                data: m.data.to_vec(),
+            });
+        }
+        let mut a = self.clone();
+        let mut inverse = Self::identity(n);
+        for col in 0..n {
+            let pivot = (col..n).find(|&r| a.data[r * n + col] != 0)?;
+            if pivot != col {
+                a.swap_rows(pivot, col);
+                inverse.swap_rows(pivot, col);
+            }
+            let inv = Arithmetic::<MOD>::inverse(a.data[col * n + col]);
+            for j in 0..n {
+                a.data[col * n + j] = Arithmetic::<MOD>::mul(a.data[col * n + j], inv);
+                inverse.data[col * n + j] = Arithmetic::<MOD>::mul(inverse.data[col * n + j], inv);
+            }
+
+            for row in 0..n {
+                continueif!(row == col);
+                let factor = a.data[row * n + col];
+                continueif!(factor == 0);
+                for j in 0..n {
+                    a.data[row * n + j] = Arithmetic::<MOD>::sub(
+                        a.data[row * n + j],
+                        Arithmetic::<MOD>::mul(factor, a.data[col * n + j]),
+                    );
+                    inverse.data[row * n + j] = Arithmetic::<MOD>::sub(
+                        inverse.data[row * n + j],
+                        Arithmetic::<MOD>::mul(factor, inverse.data[col * n + j]),
+                    );
+                }
+            }
+        }
+        return Some(inverse);
+    } // end of method
+
+    #[inline(always)]
+    pub fn pow(&self, exp: u64) -> Self {
+        assert_eq!(self.rows, self.cols, "正方行列が必要です");
+        return monoid_pow(&MatrixMonoid::<MOD>::new(self.rows), self, exp);
+    } // end of method
+
+    /// 非正方行列は指数にかかわらず拒否。負の指数で特異ならNone。
+    #[inline(always)]
+    pub fn pow_signed(&self, exp: i64) -> Option<Self> {
+        assert_eq!(self.rows, self.cols, "正方行列が必要です");
+        if exp < 0 {
+            return Some(self.try_inverse()?.pow(exp.unsigned_abs()));
+        } else {
+            return Some(self.pow(exp as u64));
+        }
+    } // end of method
+
+    /// 列ベクトルに左から作用させる。
+    #[inline(always)]
+    pub fn apply(&self, vector: &[u64]) -> Vec<u32> {
+        assert_eq!(vector.len(), self.cols, "ベクトルの次元が一致していません");
+        let vector: Vec<u32> = vector.iter().map(|&x| (x % MOD as u64) as u32).collect();
+        return (0..self.rows)
+            .map(|i| {
+                let mut sum = 0;
+                for (j, &x) in vector.iter().enumerate() {
+                    sum = Arithmetic::<MOD>::add(sum, Arithmetic::<MOD>::mul(self.data[i * self.cols + j], x));
+                }
+                return sum;
+            })
+            .collect();
+    } // end of method
+
+    #[inline(always)]
+    fn swap_rows(&mut self, a: usize, b: usize) {
+        for j in 0..self.cols {
+            self.data.swap(a * self.cols + j, b * self.cols + j);
+        }
+    } // end of method
+} // impl Matrix
+
+impl<const MOD: u32> Add<&Matrix<MOD>> for &Matrix<MOD> {
+    type Output = Matrix<MOD>;
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    fn add(self, rhs: &Matrix<MOD>) -> Self::Output { Matrix::add(self, rhs) }
+} // end of impl Add for Matrix
+
+impl<const MOD: u32> Sub<&Matrix<MOD>> for &Matrix<MOD> {
+    type Output = Matrix<MOD>;
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    fn sub(self, rhs: &Matrix<MOD>) -> Self::Output { self.subtract(rhs) }
+} // end of impl Sub for Matrix
+
+impl<const MOD: u32> Mul<&Matrix<MOD>> for &Matrix<MOD> {
+    type Output = Matrix<MOD>;
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    fn mul(self, rhs: &Matrix<MOD>) -> Self::Output { self.multiply(rhs) }
+} // end of impl Mul for Matrix
+
+impl<const MOD: u32> Neg for &Matrix<MOD> {
+    type Output = Matrix<MOD>;
+
+    #[inline(always)]
+    fn neg(self) -> Self::Output {
+        return Matrix {
+            rows: self.rows,
+            cols: self.cols,
+            data: self.data.iter().map(|&x| Arithmetic::<MOD>::neg(x)).collect(),
+        };
+    } // end of method
+} // end of impl Neg for Matrix
+
+/// 固定した次元の正方行列の積。異なるサイズの値は拒否する。
+#[derive(Clone, Copy, Debug)]
+pub struct MatrixMonoid<const MOD: u32 = DEFAULT_MATRIX_MOD> {
+    size: usize,
+} // end of struct MatrixMonoid
+
+impl<const MOD: u32> MatrixMonoid<MOD> {
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn new(size: usize) -> Self {
+        let () = Arithmetic::<MOD>::VALID;
+        size.checked_mul(size).expect("行列の要素数が大きすぎます");
+        return Self { size };
+    } // end of constructor
+} // end of impl MatrixMonoid
+
+impl<const MOD: u32> Monoid for MatrixMonoid<MOD> {
+    type S = Matrix<MOD>;
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    fn identity(&self) -> Self::S { Matrix::identity(self.size) }
+
+    #[inline(always)]
+    fn combine(&self, left: &Self::S, right: &Self::S) -> Self::S {
+        assert_eq!(left.shape(), (self.size, self.size), "群・モノイドの次元が一致していません");
+        assert_eq!(right.shape(), (self.size, self.size), "群・モノイドの次元が一致していません");
+        return left.multiply(right);
+    } // end of method
+} // end of impl Monoid for MatrixMonoid
+
+/// 可逆性を検証済みの正方行列。内部の可変参照は公開しない。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InvertibleMatrix<const MOD: u32 = DEFAULT_MATRIX_MOD>(Matrix<MOD>);
+impl<const MOD: u32> InvertibleMatrix<MOD> {
+    #[inline(always)]
+    pub fn try_new(matrix: Matrix<MOD>) -> Option<Self> {
+        let () = Arithmetic::<MOD>::VALID;
+        if matrix.rows != matrix.cols || matrix.determinant() == 0 {
+            return None;
+        } else {
+            return Some(Self(matrix));
+        };
+    } // end of constructor
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    pub fn identity(size: usize) -> Self { Self(Matrix::identity(size)) }
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    pub fn size(&self) -> usize { self.0.rows }
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    pub fn as_matrix(&self) -> &Matrix<MOD> { &self.0 }
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    pub fn into_matrix(self) -> Matrix<MOD> { self.0 }
+
+    #[inline(always)]
+    pub fn multiply(&self, rhs: &Self) -> Self {
+        assert_eq!(self.size(), rhs.size(), "群要素の次元が一致していません");
+        return Self(self.0.multiply(&rhs.0));
+    } // end of method
+
+    #[inline(always)]
+    pub fn inverse(&self) -> Self {
+        return Self(self.0.try_inverse().expect("可逆行列の内部不変条件違反"));
+    } // end of method
+
+    #[inline(always)]
+    pub fn pow(&self, exp: i64) -> Self {
+        return group_pow(&MatrixGroup::<MOD>::new(self.size()), self, exp);
+    } // end of method
+} // end of impl InvertibleMatrix
+
+impl<const MOD: u32> Mul<&InvertibleMatrix<MOD>> for &InvertibleMatrix<MOD> {
+    type Output = InvertibleMatrix<MOD>;
+
+	#[rustfmt::skip]
+    #[inline(always)]
+    fn mul(self, rhs: &InvertibleMatrix<MOD>) -> Self::Output { self.multiply(rhs) }
+} // end of impl Mul for InvertibleMatrix
+
+/// 同じsizeの可逆行列からなる群。要素作成時にも次元を検査できる。
+#[derive(Clone, Copy, Debug)]
+pub struct MatrixGroup<const MOD: u32 = DEFAULT_MATRIX_MOD> {
+    size: usize,
+}
+
+impl<const MOD: u32> MatrixGroup<MOD> {
+    #[rustfmt::skip]
+    #[inline(always)]
+    pub fn new(size: usize) -> Self {
+        let () = Arithmetic::<MOD>::VALID;
+        size.checked_mul(size).expect("行列の要素数が大きすぎます");
+        return Self { size };
+    } // end of constructor
+
+    #[inline(always)]
+    pub fn try_element(&self, matrix: Matrix<MOD>) -> Option<InvertibleMatrix<MOD>> {
+        if matrix.shape() != (self.size, self.size) {
+            return None;
+        } else {
+            return InvertibleMatrix::try_new(matrix);
+        }
+    } // end of method
+} // end of impl MatrixGroup
+
+impl<const MOD: u32> Monoid for MatrixGroup<MOD> {
+    type S = InvertibleMatrix<MOD>;
+
+ 	#[rustfmt::skip]
+    #[inline(always)]
+    fn identity(&self) -> Self::S { InvertibleMatrix::identity(self.size) }
+
+    #[inline(always)]
+    fn combine(&self, left: &Self::S, right: &Self::S) -> Self::S {
+        assert_eq!(left.size(), self.size, "群の次元が一致していません");
+        assert_eq!(right.size(), self.size, "群の次元が一致していません");
+        return left.multiply(right);
+    } // end of method
+} // end of impl Monoid for MatrixGroup
+
+impl<const MOD: u32> Group for MatrixGroup<MOD> {
+    #[inline(always)]
+    fn inverse(&self, value: &Self::S) -> Self::S {
+        assert_eq!(value.size(), self.size, "群の次元が一致していません");
+        return value.inverse();
+    } // end of method
+} // end of impl Group for Matrix Group
