@@ -92,7 +92,8 @@ const UINF: usize = (1_usize << 61) - 1;
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/coordinate_compression.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/coordinate_compression.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/coordinate_compression.rs
 
 // 静的な座標圧縮
 ///
@@ -252,7 +253,8 @@ impl<T> Index<usize> for CoordinateCompression<T> {
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/wavelet_matrix.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/wavelet_matrix.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/wavelet_matrix.rs
 
 /// 1段分のビット列。64ビットごとに累積個数を持ち、最後の端数は popcount で数える。
 #[derive(Debug, Clone)]

@@ -92,7 +92,8 @@ const UINF: usize = (1_usize << 61) - 1;
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/monoid_group_abelian.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/monoid_group_abelian.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/monoid_group_abelian.rs
 
 // ======================================================================================
 //
@@ -175,7 +176,8 @@ where
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/monoid_group_abelian.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/monoid_group_abelian.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/monoid_group_abelian.rs
 
 /// モノイドに逆元を追加した群
 ///
@@ -261,7 +263,8 @@ where
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/monoid_group_abelian.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/monoid_group_abelian.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/monoid_group_abelian.rs
 
 /// 可換群 (Abelian Group)
 ///
@@ -355,7 +358,8 @@ where
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/union_find.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/union_find.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/union_find.rs
 
 // ======================================================================================
 //
@@ -472,7 +476,8 @@ impl UnionFind {
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/union_find.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/union_find.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/union_find.rs
 
 /// 重み付きUnionFind
 /// weights[v] = a[v] - a[parent[v]] (mod MOD)
@@ -582,7 +587,8 @@ impl WeightedUnionFind {
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/union_find.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/union_find.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/union_find.rs
 
 /// 群のポテンシャルを管理するUnionFind
 /// 数学的定義
@@ -763,7 +769,8 @@ where
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/union_find.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/union_find.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/union_find.rs
 
 /// 区間 [a, a+k), [b, b+k) の対応する頂点同士をまとめて結合する。
 ///

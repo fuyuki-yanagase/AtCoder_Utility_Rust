@@ -92,7 +92,8 @@ const UINF: usize = (1_usize << 61) - 1;
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/vec2_angle.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/vec2_angle.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/vec2_angle.rs
 
 // ======================================================================================
 //
@@ -383,7 +384,8 @@ impl MulAssign<i64> for Vec2 {
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/vec2_angle.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/vec2_angle.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/vec2_angle.rs
 
 /// 回転数を含めた偏角
 ///

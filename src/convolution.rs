@@ -91,7 +91,8 @@ const UINF: usize = (1_usize << 61) - 1;
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/convolution.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/convolution.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/convolution.rs
 
 // ======================================================================================
 //
@@ -130,7 +131,8 @@ pub fn convolution_naive_i64(a: &[i64], b: &[i64]) -> Vec<i64> {
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/convolution.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/convolution.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/convolution.rs
 
 /// 係数列から、評価点ω^0, ..., ω^(N-1)での値を求める。
 /// この順変換では、角度の符号をプラスに統一する。
@@ -237,7 +239,8 @@ pub fn convolution_fft(a: &[f64], b: &[f64]) -> Vec<f64> {
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/convolution.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/convolution.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/convolution.rs
 
 const NTT_MOD: u64 = 998244353_u64;
 const NTT_PRIMITIVE_ROOT: u64 = 3;
@@ -391,7 +394,8 @@ pub fn convolution_ntt(a: &[u64], b: &[u64]) -> Vec<u64> {
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/convolution.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/convolution.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/convolution.rs
 
 // 畳み込み（998244353・反復型radix-4）
 // 参考: AtCoder Library convolution.hpp (CC0)

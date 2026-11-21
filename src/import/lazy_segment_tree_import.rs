@@ -92,7 +92,8 @@ const UINF: usize = (1_usize << 61) - 1;
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/lazy_segment_tree.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/lazy_segment_tree.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/lazy_segment_tree.rs
 
 // LazySegmentTree
 
@@ -419,7 +420,8 @@ where
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/lazy_segment_tree.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/lazy_segment_tree.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/lazy_segment_tree.rs
 
 /// min/max の単位元を返すtrait
 /// Rust標準には 整数/浮動小数 まとめて最大/最小を返す共通traitが無いので自作
@@ -509,7 +511,8 @@ impl_zero_value!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize,
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/lazy_segment_tree.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/lazy_segment_tree.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/lazy_segment_tree.rs
 
 /// 区間最大値と、その最大値が存在する index を持つ
 #[derive(Clone, Copy, PartialEq, Debug)]

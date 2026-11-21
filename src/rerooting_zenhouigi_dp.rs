@@ -93,7 +93,8 @@ use crate::monoid_group_abelian::*;
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/rerooting_zenhouigi_dp.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/rerooting_zenhouigi_dp.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/rerooting_zenhouigi_dp.rs
 
 /// 辺の情報の型を E とする、無向木の全方位木DP。
 ///

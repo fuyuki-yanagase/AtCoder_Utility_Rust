@@ -91,7 +91,8 @@ const UINF: usize = (1_usize << 61) - 1;
 // ======================================================================================
 // ======================================================================================
 // ======================================================================================
-// Library URL : https://fuyuki-connect.net/libraries/rust/324c72d2a705af1b/src/bfs_01.rs
+// Library URL : https://fuyuki-connect.net/libraries/rust/4f9d7e5464c603cf/src/bfs_01.rs
+// Library URL : https://github.com/fuyuki-yanagase/AtCoder_Utility_Rust/blob/fb6f94b1d523ce47f174b8f69c53a8d0a8698fa5/src/bfs_01.rs
 
 /// 辺コストが0または1のグラフの、startから各頂点への最短距離を返す。
 /// startと各辺の行き先はgraphの有効な頂点番号であることを前提とし、入力検証は行わない。
